@@ -1,0 +1,26 @@
+# Gradle 构建产物
+.gradle/
+build/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# 构建时生成的 npm 配置（覆盖用户级 ~/.npmrc 的 cache/prefix）
+ui/.npmrc
+ui/node_modules/
+ui/pnpm-install.log
+
+# ui-plugin.json 由 ui-plugin-bundler-kit 在构建时生成到 dist，源目录残留物不提交
+ui/ui-plugin.json
+
+# 构建日志
+*.log
+
+# 本地临时/测试目录（必须锚定根目录：Java 包路径含 run/，如 src/main/java/run/...）
+/run/
+/workplace/

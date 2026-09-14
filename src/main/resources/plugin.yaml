@@ -1,0 +1,20 @@
+apiVersion: plugin.halo.run/v1alpha1
+kind: Plugin
+metadata:
+  # 插件唯一标识，小写字母、数字、连字符
+  name: bili-cookie
+spec:
+  enabled: true
+  requires: ">=2.26.0"
+  settingName: bili-cookie-settings
+  configMapName: bili-cookie-config
+  author:
+    name: Breazen
+    website: https://example.com/
+  homepage: https://example.com/
+  issues: https://example.com/
+  displayName: "Bilibili Cookie管理"
+  description: "为 halo 用户提供 Bilibili Cookie 保存功能，并按时自动刷新避免失效，用户可通过专属客户端进行 Bilibili 账号自动登录。"
+  license:
+    - name: "GPL-3.0"
+      url: "https://www.gnu.org/licenses/gpl-3.0.html"

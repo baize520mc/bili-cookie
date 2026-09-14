@@ -1,0 +1,43 @@
+# 角色模板：用户自助（view，聚合到 authenticated）与管理员（manage）两组权限。
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: bili-cookie-role-view
+  labels:
+    halo.run/role-template: "true"
+    # 将自助角色聚合到 authenticated，使所有已登录用户无需单独授权即可访问自助接口。
+    rbac.authorization.halo.run/aggregate-to-authenticated: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "B站 Cookie 共享"
+    rbac.authorization.halo.run/display-name: "Cookie 自助使用"
+rules:
+  - apiGroups: ["api.bili-cookie.halo.run"]
+    resources:
+      - "cookie"
+      - "status"
+      - "logs"
+      - "cookie/refresh"
+      - "cookie/validate"
+      - "cookie/preferences"
+      - "cookie/clear"
+      - "cookie/client"
+      - "cookie/connect"
+    verbs: ["get", "list", "create", "update"]
+---
+apiVersion: v1alpha1
+kind: Role
+metadata:
+  name: bili-cookie-role-manage
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/dependencies: |
+      ["bili-cookie-role-view"]
+    rbac.authorization.halo.run/module: "B站 Cookie 共享"
+    rbac.authorization.halo.run/display-name: "Cookie 管理"
+rules:
+  - apiGroups: ["api.bili-cookie.halo.run"]
+    # admin 对应 /admin/* 管理接口路径的 resource 段；
+    # 其余为自定义模型与用户自助接口资源（与 view 角色保持一致，便于 manage 独立授权）。
+    resources: ["cookie", "status", "users", "settings", "logs", "refresh", "admin"]
+    verbs: ["*"]

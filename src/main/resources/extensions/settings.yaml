@@ -1,0 +1,23 @@
+apiVersion: v1alpha1
+kind: Setting
+metadata:
+  name: bili-cookie-settings
+spec:
+  forms:
+    - group: basic
+      label: 基础设置
+      formSchema:
+        - $formkit: switch
+          name: globalEnabled
+          label: 全局开关
+          value: true
+        - $formkit: number
+          name: refreshIntervalHours
+          label: 刷新间隔（小时）
+          value: 6
+          validation: required|min:1
+        - $formkit: number
+          name: cookieExpireDays
+          label: Cookie 预估有效期（天，仅前端展示用）
+          value: 30
+          validation: required|min:1

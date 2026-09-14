@@ -1,0 +1,62 @@
+plugins {
+    id 'base'
+    id "com.github.node-gradle.node" version "7.1.0"
+}
+
+group 'run.halo.bilicookie.ui'
+
+node {
+    // 自管理 Node（下载到 Gradle 用户目录），避免使用系统 npm —— 其全局 prefix 指向
+    // C:\Program Files\nodejs，非管理员执行 `npm install -g pnpm` 会 EPERM。
+    download = true
+    version = '18.19.0'
+    // 固定与 Node 18 兼容的 pnpm 版本。
+    pnpmVersion = '9.15.9'
+}
+
+// 用户全局 ~/.npmrc 将 cache/prefix 指向 C:\Program Files\nodejs（无写权限），且
+// pnpmSetup/npmSetup 等任务不暴露环境注入 API，这里生成项目级 .npmrc（优先级高于用户级），
+// 将 cache/prefix/store 全部指向构建目录内的可写位置，避免 npm/pnpm 写入系统目录导致 EPERM。
+def npmBase = layout.buildDirectory.get().asFile
+def projectNpmrc = layout.projectDirectory.file('.npmrc')
+projectNpmrc.getAsFile().text = [
+    'cache=' + new File(npmBase, '.npm-cache').absolutePath,
+    'prefix=' + new File(npmBase, '.npm-prefix').absolutePath,
+    'store-dir=' + new File(npmBase, '.pnpm-store').absolutePath,
+].join('\n') + '\n'
+
+// 兜底：为 pnpm 类任务再注入环境变量（npm 环境变量优先级高于 .npmrc）。
+// 说明：node-gradle 的 PnpmTask 通过 execOverrides(Action<ExecSpec>) 注入执行环境。
+['pnpmInstall', 'pnpmBuild', 'pnpmExec'].each { name ->
+    tasks.matching { it.name == name }.configureEach { t ->
+        t.execOverrides { exec ->
+            exec.environment('NPM_CONFIG_CACHE', new File(npmBase, '.npm-cache').absolutePath)
+            exec.environment('NPM_CONFIG_PREFIX', new File(npmBase, '.npm-prefix').absolutePath)
+        }
+    }
+}
+
+// npmSetup/pnpmSetup 内部执行 `npm install --global`，即使项目 .npmrc 已覆盖 cache，
+// 全局安装路径仍会命中 ~/.npmrc 的 cache 配置（如 C:\Program Files\nodejs\node_cache，无写权限）。
+// 这两个任务公开了 args(ListProperty)，向命令追加 `--cache <可写目录>`（CLI 参数优先级最高）。
+['npmSetup', 'pnpmSetup'].each { name ->
+    tasks.matching { it.name == name }.configureEach { t ->
+        t.args.addAll('--cache', new File(npmBase, '.npm-cache').absolutePath)
+    }
+}
+
+tasks.register('pnpmBuild', PnpmTask) {
+    group = 'build'
+    description = 'Build the UI project using pnpm'
+    args = ['build']
+    dependsOn tasks.named('pnpmInstall')
+    inputs.dir(layout.projectDirectory.dir('src'))
+    inputs.files(fileTree(
+        dir: layout.projectDirectory,
+        includes: ['*.cjs', '*.ts', '*.js', '*.json', '*.yaml']))
+    outputs.dir(layout.buildDirectory.dir('dist'))
+}
+
+tasks.named('assemble') {
+    dependsOn tasks.named('pnpmBuild')
+}
