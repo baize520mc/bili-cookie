@@ -39,14 +39,29 @@
 
 ## 界面截图
 
-> 截图待补充。计划收录以下界面，提供后将嵌入此处：
->
-> | 序号 | 界面 | 说明 |
-> | --- | --- | --- |
-> | 1 | 用户中心「B站 Cookie」主页 | 状态概览 + 三级开关 + 获取方式提示 |
-> | 2 | 「更新 Cookie」弹窗 | 5 个字段（SESSDATA / bili_jct / DedeUserID / refresh_token / sid） |
-> | 3 | 用户「操作日志」面板 | 本人操作记录 |
-> | 4 | 管理端「Cookie 管理日志」 | 全局日志 + 用户筛选 |
+### 用户端 · Cookie 设置
+
+状态概览、Cookie 获取方式提示与三级用户开关（总开关 / 接受客户端连接 / 自动刷新）：
+
+![用户端 Cookie 设置](docs/images/user-cookie-settings.png)
+
+### 用户端 · 更新 Cookie
+
+一次性填写 5 个字段（SESSDATA、bili_jct、DedeUserID、refresh_token、sid）：
+
+![更新 Cookie 弹窗](docs/images/update-cookie-dialog.png)
+
+### 用户端 · 操作日志
+
+本人全部操作（保存 / 刷新 / 验证 / 客户端连接）记录回溯：
+
+![用户操作日志](docs/images/user-operations-log.png)
+
+### 管理端 · Cookie 管理日志
+
+全局操作日志聚合，支持按用户 ID 筛选，成功 / 失败状态一目了然：
+
+![管理端 Cookie 管理日志](docs/images/admin-logs.png)
 
 ## 安装
 
