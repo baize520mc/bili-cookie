@@ -1,7 +1,5 @@
 package run.halo.bilicookie.service;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -57,8 +55,8 @@ public class AdminService {
             .flatMap(setting -> auditLogService
                 .record(null, operator, "ADMIN_SETTINGS", true,
                     "修改设置：全局开关=" + setting.globalEnabled()
-                        + "，刷新间隔=" + setting.refreshIntervalHours()
-                        + "h，预估有效期=" + setting.cookieExpireDays() + "天")
+                        + "，刷新间隔=" + formatDouble(setting.refreshIntervalMinutes())
+                        + "分钟，预估有效期=" + setting.cookieExpireDays() + "天")
                 .thenReturn(setting));
     }
 
@@ -107,11 +105,11 @@ public class AdminService {
     private BiliCookieSetting merge(BiliCookieSetting current, AdminSettingsRequest request) {
         boolean globalEnabled = request.globalEnabled() != null
             ? request.globalEnabled() : current.globalEnabled();
-        int refreshIntervalHours = request.refreshIntervalHours() != null
-            ? request.refreshIntervalHours() : current.refreshIntervalHours();
+        double refreshIntervalMinutes = request.refreshIntervalMinutes() != null
+            ? request.refreshIntervalMinutes() : current.refreshIntervalMinutes();
         int cookieExpireDays = request.cookieExpireDays() != null
             ? request.cookieExpireDays() : current.cookieExpireDays();
-        return new BiliCookieSetting(globalEnabled, refreshIntervalHours, cookieExpireDays);
+        return new BiliCookieSetting(globalEnabled, refreshIntervalMinutes, cookieExpireDays);
     }
 
     private Mono<BiliCookieSetting> persistSetting(BiliCookieSetting setting) {
@@ -135,40 +133,46 @@ public class AdminService {
     }
 
     private String toJson(BiliCookieSetting s) {
+        // 整数值去掉小数点，避免 ConfigMap 中出现 "6.0" 这类冗余表示。
         return "{\"globalEnabled\":" + s.globalEnabled()
-            + ",\"refreshIntervalHours\":" + s.refreshIntervalHours()
+            + ",\"refreshIntervalMinutes\":" + formatDouble(s.refreshIntervalMinutes())
             + ",\"cookieExpireDays\":" + s.cookieExpireDays() + "}";
+    }
+
+    private static String formatDouble(double value) {
+        return value == Math.floor(value) && !Double.isInfinite(value)
+            ? String.valueOf((long) value) : String.valueOf(value);
     }
 
     private Mono<AdminUserStatus> toUserStatus(User user) {
         String userId = user.getMetadata().getName();
         String username = displayName(user);
         return cookieService.find(userId)
-            .flatMap(cookie -> settingService.cookieExpireDays().map(days -> {
-                var spec = cookie.getSpec();
-                boolean valid = isNotBlank(spec.getSessdata());
-                int expiresIn = computeExpiresIn(spec.getSavedAt(), days);
-                return new AdminUserStatus(userId, username, true, valid, expiresIn,
-                    spec.getBiliUsername(), spec.getBiliUid(),
-                    isTrue(spec.getUserEnabled()), isTrue(spec.getClientEnabled()),
-                    isTrue(spec.getAutoRefreshEnabled()));
-            }))
+            .flatMap(cookie -> cookieService.expiresInDays(cookie)
+                .map(expiresIn -> {
+                    var spec = cookie.getSpec();
+                    boolean valid = isNotBlank(spec.getSessdata());
+                    return new AdminUserStatus(userId, username, true, valid, expiresIn,
+                        spec.getBiliUsername(), spec.getBiliUid(),
+                        isTrue(spec.getUserEnabled()), isTrue(spec.getClientEnabled()),
+                        isTrue(spec.getAutoRefreshEnabled()));
+                }))
             .defaultIfEmpty(new AdminUserStatus(userId, username, false, false, 0,
                 null, null, false, false, false));
     }
 
     private Mono<UserCookieDetailStatus> toDetailStatus(BiliCookie cookie) {
-        return settingService.cookieExpireDays().map(days -> {
-            var spec = cookie.getSpec();
-            boolean valid = isNotBlank(spec.getSessdata());
-            int expiresIn = computeExpiresIn(spec.getSavedAt(), days);
-            boolean refreshTokenPresent = isNotBlank(spec.getRefreshToken());
-            String message = valid ? "正常" : "未登录";
-            return new UserCookieDetailStatus(true, valid, expiresIn, spec.getSavedAt(), message,
-                refreshTokenPresent, isTrue(spec.getUserEnabled()),
-                isTrue(spec.getClientEnabled()), isTrue(spec.getAutoRefreshEnabled()),
-                spec.getBiliUsername(), spec.getBiliUid());
-        });
+        var spec = cookie.getSpec();
+        boolean valid = isNotBlank(spec.getSessdata());
+        return cookieService.expiresInDays(cookie)
+            .map(expiresIn -> {
+                boolean refreshTokenPresent = isNotBlank(spec.getRefreshToken());
+                String message = valid ? "正常" : "未登录";
+                return new UserCookieDetailStatus(true, valid, expiresIn, spec.getSavedAt(), message,
+                    refreshTokenPresent, isTrue(spec.getUserEnabled()),
+                    isTrue(spec.getClientEnabled()), isTrue(spec.getAutoRefreshEnabled()),
+                    spec.getBiliUsername(), spec.getBiliUid());
+            });
     }
 
     private String displayName(User user) {
@@ -189,19 +193,5 @@ public class AdminService {
 
     private static boolean isTrue(Boolean b) {
         return Boolean.TRUE.equals(b);
-    }
-
-    private int computeExpiresIn(String savedAt, int expireDays) {
-        if (!isNotBlank(savedAt)) {
-            return 0;
-        }
-        try {
-            Instant saved = Instant.parse(savedAt);
-            Instant expiry = saved.plus(Duration.ofDays(expireDays));
-            long days = Duration.between(Instant.now(), expiry).toDays();
-            return (int) Math.max(0, days);
-        } catch (Exception e) {
-            return 0;
-        }
     }
 }

@@ -20,6 +20,8 @@ export interface StatusData {
   bili_username: string | null;
   bili_uid: string | null;
   validated: boolean;
+  has_refresh_token: boolean;
+  plugin_version: string;
 }
 
 export interface CookieData {

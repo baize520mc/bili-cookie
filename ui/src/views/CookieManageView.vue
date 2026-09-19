@@ -69,6 +69,8 @@ const tipClientVisible = ref(true);
 /** 总开关未启用时，功能按钮一律置灰并展示免责声明 */
 const userEnabled = computed(() => status.value?.user_enabled === true);
 const hasCookie = computed(() => status.value?.valid === true);
+/** 缺少 refresh_token 时无法自动刷新，开关禁用并提示 */
+const hasRefreshToken = computed(() => status.value?.has_refresh_token === true);
 
 const statusState = computed<StatusState>(() => {
   const s = status.value;
@@ -305,6 +307,9 @@ onMounted(loadStatus);
           <div class="bc-toolbar">
             <div class="bc-toolbar__status">
               <VStatusDot :state="statusState" :text="statusText" />
+              <span v-if="status?.plugin_version" class="bc-toolbar__version">
+                v{{ status.plugin_version }}
+              </span>
             </div>
             <span class="bc-toolbar__hint">
               Cookie 加密保存于本站，仅你本人可见
@@ -324,6 +329,16 @@ onMounted(loadStatus);
             :closable="false"
             title="功能未启用"
             description="本功能默认关闭。启用后将由本站加密保存你的 B 站 Cookie，并可按你的设置自动续期。请勿将 Cookie 提供给任何人，泄露可能导致账号被盗。开启即表示你已知晓并同意以上风险。"
+            class="bc-alert"
+          />
+
+          <!-- 无法自动刷新：已有 Cookie 但缺少 refresh_token，自动续期不可用 -->
+          <VAlert
+            v-if="userEnabled && hasCookie && !hasRefreshToken"
+            type="error"
+            :closable="false"
+            title="无法自动刷新"
+            description="当前 Cookie 缺少 refresh_token（ac_time_value），自动续期不可用，自动刷新开关已禁用。请点击右上角「更新 Cookie」重新上传完整 Cookie（含 refresh_token）。"
             class="bc-alert"
           />
 
@@ -443,7 +458,7 @@ onMounted(loadStatus);
                 <div class="bc-status__item">
                   <span class="bc-status__label">自动续期</span>
                   <span class="bc-status__value bc-status__value--sm">
-                    {{ status?.auto_refresh_enabled ? "已启用" : "已停用" }}
+                    {{ !hasRefreshToken ? "无法自动刷新" : (status?.auto_refresh_enabled ? "已启用" : "已停用") }}
                   </span>
                 </div>
               </div>
@@ -476,11 +491,15 @@ onMounted(loadStatus);
               <div class="bc-switch-row">
                 <div class="bc-switch-row__text">
                   <span class="bc-switch-row__title">自动刷新 Cookie</span>
-                  <span class="bc-switch-row__desc">到达刷新间隔后由本站自动续期，避免 Cookie 过期</span>
+                  <span class="bc-switch-row__desc">
+                    {{ hasRefreshToken
+                      ? "到达刷新间隔后由本站自动续期，避免 Cookie 过期"
+                      : "缺少 refresh_token，无法自动刷新；请重新上传完整 Cookie" }}
+                  </span>
                 </div>
                 <VSwitch
-                  :model-value="userEnabled && status?.auto_refresh_enabled === true"
-                  :disabled="!userEnabled"
+                  :model-value="hasRefreshToken && userEnabled && status?.auto_refresh_enabled === true"
+                  :disabled="!userEnabled || !hasRefreshToken"
                   @update:model-value="(v: boolean) => togglePref({ autoRefreshEnabled: v })"
                 />
               </div>
@@ -695,6 +714,11 @@ onMounted(loadStatus);
 .bc-toolbar__status {
   display: flex;
   align-items: center;
+  gap: 8px;
+}
+.bc-toolbar__version {
+  font-size: var(--bc-font-caption);
+  color: var(--bc-text-faint);
 }
 .bc-toolbar__hint {
   font-size: var(--bc-font-caption);
