@@ -12,9 +12,10 @@ spec:
           label: 全局开关
           value: true
         - $formkit: number
-          name: refreshIntervalHours
-          label: 刷新间隔（小时）
-          value: 6
+          name: refreshIntervalMinutes
+          label: 刷新间隔（分钟）
+          value: 360
+          step: 1
           validation: required|min:1
         - $formkit: number
           name: cookieExpireDays

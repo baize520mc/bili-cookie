@@ -5,7 +5,7 @@ package run.halo.bilicookie.config;
  */
 public record BiliCookieSetting(
     boolean globalEnabled,
-    int refreshIntervalHours,
+    double refreshIntervalMinutes,
     int cookieExpireDays
 ) {
     public static final String GROUP = "basic";

@@ -10,7 +10,8 @@ import run.halo.app.plugin.ReactiveSettingFetcher;
 @Component
 public class SettingService {
 
-    private static final BiliCookieSetting DEFAULT = new BiliCookieSetting(true, 6, 30);
+    /** 默认值：全局开关开、刷新间隔 360 分钟（6 小时）、有效期 30 天。 */
+    private static final BiliCookieSetting DEFAULT = new BiliCookieSetting(true, 360, 30);
 
     private final ReactiveSettingFetcher settingFetcher;
 
@@ -20,6 +21,12 @@ public class SettingService {
 
     public Mono<BiliCookieSetting> getSetting() {
         return settingFetcher.fetch(BiliCookieSetting.GROUP, BiliCookieSetting.class)
+            // 兼容 v1.0.0 旧字段名 refreshIntervalHours：旧配置读不到新字段时
+            // 分钟数为 0，回退默认间隔，避免出现"每分钟刷新"。
+            .map(setting -> setting.refreshIntervalMinutes() > 0
+                ? setting
+                : new BiliCookieSetting(setting.globalEnabled(),
+                    DEFAULT.refreshIntervalMinutes(), setting.cookieExpireDays()))
             .switchIfEmpty(Mono.just(DEFAULT));
     }
 
