@@ -16,16 +16,18 @@ public record StatusResponse(
     @JsonProperty("auto_refresh_enabled") boolean autoRefreshEnabled,
     @JsonProperty("bili_username") String biliUsername,
     @JsonProperty("bili_uid") String biliUid,
-    boolean validated
+    boolean validated,
+    @JsonProperty("has_refresh_token") boolean hasRefreshToken,
+    @JsonProperty("plugin_version") String pluginVersion
 ) {
 
-    public static StatusResponse disabled() {
+    public static StatusResponse disabled(String pluginVersion) {
         return new StatusResponse(false, false, 0, null, "全局已禁用",
-            false, false, false, null, null, false);
+            false, false, false, null, null, false, false, pluginVersion);
     }
 
-    public static StatusResponse notConfigured() {
+    public static StatusResponse notConfigured(String pluginVersion) {
         return new StatusResponse(true, false, 0, null, "未登录",
-            false, false, false, null, null, false);
+            false, false, false, null, null, false, false, pluginVersion);
     }
 }

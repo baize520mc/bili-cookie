@@ -5,7 +5,7 @@ package run.halo.bilicookie.web.dto;
  */
 public record AdminSettingsRequest(
     Boolean globalEnabled,
-    Integer refreshIntervalHours,
+    Double refreshIntervalMinutes,
     Integer cookieExpireDays
 ) {
 }

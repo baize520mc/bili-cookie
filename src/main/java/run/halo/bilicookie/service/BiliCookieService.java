@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import run.halo.app.extension.Metadata;
 import run.halo.app.extension.ReactiveExtensionClient;
+import run.halo.app.plugin.PluginContext;
 import run.halo.bilicookie.config.SettingService;
 import run.halo.bilicookie.crypto.AesGcmCipher;
 import run.halo.bilicookie.crypto.EncryptionKeyStore;
@@ -20,6 +21,7 @@ import run.halo.bilicookie.web.dto.CookieSubmitRequest;
 import run.halo.bilicookie.web.dto.PreferencesRequest;
 import run.halo.bilicookie.web.dto.StatusResponse;
 import run.halo.bilicookie.web.exception.ApiException;
+import run.halo.bilicookie.util.SessdataExpireDecoder;
 
 /**
  * 普通用户 Cookie 业务：查询、自助提交/覆盖、状态计算，以及密钥加解密编排。
@@ -34,14 +36,16 @@ public class BiliCookieService {
     private final EncryptionKeyStore keyStore;
     private final SettingService settingService;
     private final AuditLogService auditLogService;
+    private final String pluginVersion;
 
     public BiliCookieService(ReactiveExtensionClient client,
         EncryptionKeyStore keyStore, SettingService settingService,
-        AuditLogService auditLogService) {
+        AuditLogService auditLogService, PluginContext pluginContext) {
         this.client = client;
         this.keyStore = keyStore;
         this.settingService = settingService;
         this.auditLogService = auditLogService;
+        this.pluginVersion = pluginContext.getVersion();
     }
 
     /** 按 userId 查询，不存在则返回空 Mono。 */
@@ -158,11 +162,11 @@ public class BiliCookieService {
         return settingService.isEnabled()
             .flatMap(enabled -> {
                 if (!enabled) {
-                    return Mono.just(StatusResponse.disabled());
+                    return Mono.just(StatusResponse.disabled(pluginVersion));
                 }
                 return find(userId)
                     .flatMap(this::toStatus)
-                    .defaultIfEmpty(StatusResponse.notConfigured());
+                    .defaultIfEmpty(StatusResponse.notConfigured(pluginVersion));
             });
     }
 
@@ -170,7 +174,12 @@ public class BiliCookieService {
     public Mono<StatusResponse> getPreferences(String userId) {
         return find(userId)
             .flatMap(this::toStatus)
-            .defaultIfEmpty(StatusResponse.notConfigured());
+            .defaultIfEmpty(StatusResponse.notConfigured(pluginVersion));
+    }
+
+    /** 当前插件版本号（来自 PluginContext，与 plugin.yaml 一致），供其他组件构造状态响应。 */
+    public String getPluginVersion() {
+        return pluginVersion;
     }
 
     /**
@@ -242,17 +251,46 @@ public class BiliCookieService {
     }
 
     private Mono<StatusResponse> toStatus(BiliCookie cookie) {
-        return settingService.cookieExpireDays()
-            .map(days -> {
-                BiliCookieSpec spec = cookie.getSpec();
-                boolean valid = !isBlank(spec.getSessdata());
-                int expiresIn = computeExpiresIn(spec.getSavedAt(), days);
+        BiliCookieSpec spec = cookie.getSpec();
+        boolean valid = !isBlank(spec.getSessdata());
+        return expiresInDays(cookie)
+            .map(expiresIn -> {
                 String message = valid ? "正常" : "未登录";
                 return new StatusResponse(true, valid, expiresIn, spec.getSavedAt(), message,
                     isTrue(spec.getUserEnabled()), isTrue(spec.getClientEnabled()),
                     isTrue(spec.getAutoRefreshEnabled()), spec.getBiliUsername(),
-                    spec.getBiliUid(), !isBlank(spec.getValidatedAt()));
+                    spec.getBiliUid(), !isBlank(spec.getValidatedAt()),
+                    !isBlank(spec.getRefreshToken()), pluginVersion);
             });
+    }
+
+    /**
+     * 用户 Cookie 的准确剩余天数：优先解码 SESSDATA 内的真实过期时间戳，
+     * 解码失败时回退「保存时间 + 配置有效期」估算；无 Cookie 或未登录返回 0。
+     */
+    public Mono<Integer> expiresInDays(BiliCookie cookie) {
+        BiliCookieSpec spec = cookie.getSpec();
+        if (isBlank(spec.getSessdata())) {
+            return Mono.just(0);
+        }
+        return keyStore.getOrCreateCipher()
+            .flatMap(cipher -> settingService.cookieExpireDays()
+                .map(days -> computeAccurateExpiresIn(cipher, spec, days)));
+    }
+
+    /** 优先 SESSDATA 解码真实过期时间；失败回退估算。 */
+    private int computeAccurateExpiresIn(AesGcmCipher cipher, BiliCookieSpec spec,
+        int fallbackDays) {
+        try {
+            Long expire = SessdataExpireDecoder.decodeExpire(decrypt(cipher, spec.getSessdata()));
+            if (expire != null) {
+                long days = (expire - Instant.now().getEpochSecond()) / 86400L;
+                return (int) Math.max(0, days);
+            }
+        } catch (Exception ignored) {
+            // 解密/解码异常时静默回退估算
+        }
+        return computeExpiresIn(spec.getSavedAt(), fallbackDays);
     }
 
     private BiliCookieSpec buildSpec(String userId, CookieSubmitRequest request,

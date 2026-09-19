@@ -175,7 +175,7 @@ public class BiliCookieController {
         return settingService.isEnabled()
             .flatMap(enabled -> enabled ? Mono.empty()
                 : Mono.error(ApiException.pluginDisabled("插件全局开关已关闭",
-                    StatusResponse.disabled())));
+                    StatusResponse.disabled(cookieService.getPluginVersion()))));
     }
 
     /** 用户总开关校验：未启用返回 40302 + 可读提示 + 当前状态（data）。 */
